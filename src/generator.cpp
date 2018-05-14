@@ -130,6 +130,7 @@ const std::map<std::string, Settings::Setting> Settings::settings = {
 	{"array-name-delimiter", {"Sets the delimiter for the automatic output variable naming",Settings::Setting::Type::string,new std::string("")}},
 	{"array-name-camelcase", {"Sets the camel case flag for the automatic output variable naming",Settings::Setting::Type::boolean,new bool(true)}},
 	{"array-name-include-folders", {"Sets wether folders are integrated in the automatic output variable naming (begins at the current root directory)",Settings::Setting::Type::boolean,new bool(true)}},
+	{"array-name-include-extension", {"Sets wether file extensions are used in the automatic output variable naming",Settings::Setting::Type::boolean,new bool(true)}},
 	{"array-name-capital", {"Sets wether to use a captial letter at the generated name beginning",Settings::Setting::boolean,new bool(false)}},
 	{"array-type", {"Sets the type of the output arrays",Settings::Setting::Type::string,new std::string("const unsigned char"),Settings::Setting::notnull}},
 	{"array-size", {"Sets wether the output array size ist stored in its own variable",Settings::Setting::Type::boolean,new bool(true)}},
@@ -141,6 +142,7 @@ const std::map<std::string, Settings::Setting> Settings::settings = {
 	{"file-camelcase", {"Sets the camel case flag for the automatic file naming",Settings::Setting::Type::boolean,new bool(false)}},
 	{"file-capital", {"Sets wether to use a captial letter at the generated filename beginning",Settings::Setting::boolean,new bool(false)}},
 	{"file-include-folders", {"Sets wether folders are integrated in the automatic file naming (begins at the current root directory)",Settings::Setting::Type::boolean,new bool(false)}},
+	{"file-include-extension", {"Sets wether file extensions are used in the automatic file naming",Settings::Setting::Type::boolean,new bool(true)}},
 	{"copy-folder-system", {"Sets wether the same folder names are used when automatically generating output file names (begins at the current root directory)",Settings::Setting::Type::boolean,new bool(false)}},
 };
 
