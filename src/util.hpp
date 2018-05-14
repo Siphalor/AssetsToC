@@ -3,9 +3,9 @@
 
 #define ATOC_APP_NAME "AssetsToC"
 #define ATOC_SHORT_NAME "atoc"
-#define ATOC_VERSION_MAJOR 0
+#define ATOC_VERSION_MAJOR 1
 #define ATOC_VERSION_MINOR 0
-#define ATOC_VERSION_SUBMINOR 1
+#define ATOC_VERSION_SUBMINOR 0
 
 #define PATH_TYPE std::string
 #define PATH_TYPE_SHORT string
