@@ -1,0 +1,8 @@
+# Exclude binary directory
+bin
+# Exclude build diectory
+build
+# Exclude build script
+build.cmd
+# Exclude graphic projects
+*.xcf
