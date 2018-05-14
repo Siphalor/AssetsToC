@@ -31,7 +31,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 	Phase phase;
 	atoc::generator::Settings settings;
 	settings.setIO(inputFile.parent_path().string(), outputDir.string());
-	char symbol;
+	char symbol = '\0';
 	bool bundled = false;
 	bool await = true;
 	std::map<std::string,std::string> input;
@@ -301,6 +301,16 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 								input.clear();
 								parseMode = ParseMode::await;
 							}
+						}
+					} else if(symbol == '>' && !bundled) {
+						if(currentString == "") {
+							error::statementEnd(currentLine, "expected variable name");
+							return false;
+						} else {
+							currentInputIterator->second = currentString;
+							currentString = "";
+							parseMode = ParseMode::genOutput;
+							await = true;
 						}
 					} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
 						error::unexpectedSymbol(currentLine, symbol); return false;

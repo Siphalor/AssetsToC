@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
 		inputDir = boost::filesystem::current_path().PATH_TYPE_SHORT();
 	}
 	boost::filesystem::path inputPath(inputDir);
-	if(!boost::filesystem::path(inputPath).has_filename())
+	if(!boost::filesystem::is_regular_file(inputPath))
  		inputPath += "/.atoc";
 	if(programOptions.count("output-dir")) {
 		outputDir = programOptions["output-dir"].as<PATH_TYPE>();
