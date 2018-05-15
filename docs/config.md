@@ -14,9 +14,9 @@ In those lines the actual configuration is given as key-value-pairs.
 ### Value types
 There are currently three different value types in the config:
 
-* string: just a basic text, nothing special
-* boolean: either `#!c true` or `#!c false`
-* number: an unsigned integer
+* **string**: just a basic text, nothing special
+* **boolean**: either `#!c true` or `#!c false`
+* **number**: an unsigned integer
 
 Additionally some configs must not be empty or must not be zero.
 
@@ -28,7 +28,7 @@ Additionally some configs must not be empty or must not be zero.
 One of the most important uses for the config is to modify the input and output root directory. The config system provides three keys for that purpose.
 
 * `copy-folder-system` (*boolean*, default: `#!c false`): sets wether to use the same subdirectory structure as given in the input when [declaring statements with folders](syntax#generation)
-* `input-dir` (*string*, default: empty): appends its value to the input root directory ([passed to the executable](Execution))
+* `input-dir` (*string*, default: empty): appends its value to the input root directory ([passed to the executable](execution))
 * `output-dir` (*string*, default: empty): appends its value to the output root directory
 
 ??? example

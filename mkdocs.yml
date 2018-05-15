@@ -4,6 +4,7 @@ pages:
     - Syntax: syntax.md
     - Config: config.md
     - Execution: execution.md
+    - Install: install.md
     - About: about.md
 theme:
   name: 'material'

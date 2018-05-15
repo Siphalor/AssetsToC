@@ -372,6 +372,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../install/" title="Install" class="md-nav__link">
+      Install
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
     <a href="../about/" title="About" class="md-nav__link">
       About
     </a>
@@ -493,9 +505,9 @@
 <h3 id="value-types">Value types<a class="headerlink" href="#value-types" title="Permanent link">&para;</a></h3>
 <p>There are currently three different value types in the config:</p>
 <ul>
-<li>string: just a basic text, nothing special</li>
-<li>boolean: either <code class="codehilite"><span class="nb">true</span></code> or <code class="codehilite"><span class="nb">false</span></code></li>
-<li>number: an unsigned integer</li>
+<li><strong>string</strong>: just a basic text, nothing special</li>
+<li><strong>boolean</strong>: either <code class="codehilite"><span class="nb">true</span></code> or <code class="codehilite"><span class="nb">false</span></code></li>
+<li><strong>number</strong>: an unsigned integer</li>
 </ul>
 <p>Additionally some configs must not be empty or must not be zero.</p>
 <h2 id="config-list">Config list<a class="headerlink" href="#config-list" title="Permanent link">&para;</a></h2>
@@ -508,7 +520,7 @@
 <p>One of the most important uses for the config is to modify the input and output root directory. The config system provides three keys for that purpose.</p>
 <ul>
 <li><code class="codehilite">copy-folder-system</code> (<em>boolean</em>, default: <code class="codehilite"><span class="nb">false</span></code>): sets wether to use the same subdirectory structure as given in the input when <a href="../syntax#generation">declaring statements with folders</a></li>
-<li><code class="codehilite">input-dir</code> (<em>string</em>, default: empty): appends its value to the input root directory (<a href="../Execution">passed to the executable</a>)</li>
+<li><code class="codehilite">input-dir</code> (<em>string</em>, default: empty): appends its value to the input root directory (<a href="../execution">passed to the executable</a>)</li>
 <li><code class="codehilite">output-dir</code> (<em>string</em>, default: empty): appends its value to the output root directory</li>
 </ul>
 <details class="example"><summary>Example</summary><div class="codehilite"><pre><span></span><span class="o">$</span><span class="na"> input-dir</span><span class="o">:</span><span class="s"> in</span><span class="o">;</span><span class="na"> output-dir</span><span class="o">:</span><span class="s"> out</span>

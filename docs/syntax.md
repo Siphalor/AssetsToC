@@ -2,7 +2,7 @@
 ### Paths
 All path, directory and filename declarations used by AssetsToC are relativ paths relative to the current output or input directory. AssetsToC is meant to be a completely dynamic generation system and it doesn't like to be offended by absolute paths.
 
-The only absolute paths can be specified when [running the `atoc` command](Execution).
+The only absolute paths can be specified when [running the `atoc` command](execution).
 ### Statements
 A statement is a declaration for actually generating the C code out of the given asset file(s).
 Their syntax will be covered [a bit later in this document](#single-statements).
@@ -39,9 +39,9 @@ All files are only processed when either the `.atoc` file or the corresponding a
 
 When beginning a line with a non-operator symbol, the parser automatically interpretes the following text as a asset filename to import.
 ### Variable name section
-After a `|` an optional variable name can follow. When omitted it is atomatically generated using the current [configurations](Config).
+After a `|` an optional variable name can follow. When omitted it is atomatically generated using the current [configurations](config).
 ### File output section
-After an output operator (`>`) an optional output filename can follow. When omitted it is automatically generated using the current [configurations](Config).
+After an output operator (`>`) an optional output filename can follow. When omitted it is automatically generated using the current [configurations](config).
 ### Example
 `.atoc`:
 

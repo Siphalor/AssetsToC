@@ -420,6 +420,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../install/" title="Install" class="md-nav__link">
+      Install
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
     <a href="../about/" title="About" class="md-nav__link">
       About
     </a>
@@ -577,7 +589,7 @@
                 <h2 id="basics">Basics<a class="headerlink" href="#basics" title="Permanent link">&para;</a></h2>
 <h3 id="paths">Paths<a class="headerlink" href="#paths" title="Permanent link">&para;</a></h3>
 <p>All path, directory and filename declarations used by AssetsToC are relativ paths relative to the current output or input directory. AssetsToC is meant to be a completely dynamic generation system and it doesn't like to be offended by absolute paths.</p>
-<p>The only absolute paths can be specified when <a href="../Execution">running the <code class="codehilite">atoc</code> command</a>.</p>
+<p>The only absolute paths can be specified when <a href="../execution">running the <code class="codehilite">atoc</code> command</a>.</p>
 <h3 id="statements">Statements<a class="headerlink" href="#statements" title="Permanent link">&para;</a></h3>
 <p>A statement is a declaration for actually generating the C code out of the given asset file(s).
 Their syntax will be covered <a href="#single-statements">a bit later in this document</a>.</p>
@@ -611,9 +623,9 @@ Their syntax will be covered <a href="#single-statements">a bit later in this do
 <p><mark>This section is required in all statements.</mark></p>
 <p>When beginning a line with a non-operator symbol, the parser automatically interpretes the following text as a asset filename to import.</p>
 <h3 id="variable-name-section">Variable name section<a class="headerlink" href="#variable-name-section" title="Permanent link">&para;</a></h3>
-<p>After a <code class="codehilite">|</code> an optional variable name can follow. When omitted it is atomatically generated using the current <a href="../Config">configurations</a>.</p>
+<p>After a <code class="codehilite">|</code> an optional variable name can follow. When omitted it is atomatically generated using the current <a href="../config">configurations</a>.</p>
 <h3 id="file-output-section">File output section<a class="headerlink" href="#file-output-section" title="Permanent link">&para;</a></h3>
-<p>After an output operator (<code class="codehilite">&gt;</code>) an optional output filename can follow. When omitted it is automatically generated using the current <a href="../Config">configurations</a>.</p>
+<p>After an output operator (<code class="codehilite">&gt;</code>) an optional output filename can follow. When omitted it is automatically generated using the current <a href="../config">configurations</a>.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
 <p><code class="codehilite"><span class="na">.atoc</span></code>:</p>
 <div class="codehilite"><pre><span></span><span class="s">nice_image.png </span><span class="o">|</span> <span class="nv">niiicce </span><span class="o">&gt;</span> <span class="s">dicer.h</span><span class="err">;</span>
