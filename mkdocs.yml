@@ -1,0 +1,31 @@
+site_name: AssetsToC
+pages:
+    - Home: index.md
+    - Syntax: syntax.md
+    - Config: config.md
+    - Execution: execution.md
+    - About: about.md
+theme:
+  name: 'material'
+  palette:
+    primary: 'light blue'
+    accent: 'red'
+  favicon: 'img/favicon.ico'
+  logo: 'img/icon.png'
+repo_name: 'Siphalor/AssetsToC'
+repo_url: 'https://github.com/siphalor/assetstoc'
+edit_uri: 'edit/gh-pages/docs/'
+markdown_extensions:
+    - codehilite
+    - admonition
+    - pymdownx.mark
+    - pymdownx.inlinehilite
+    - pymdownx.details
+    - toc:
+        permalink: true
+extra:
+  social:
+    - type: 'github'
+      link: 'https://github.com/siphalor'
+    - type: 'twitter'
+      link: 'https://twitter.com/siphalor'
