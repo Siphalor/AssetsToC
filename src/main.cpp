@@ -6,7 +6,7 @@
 PATH_TYPE inputDir, outputDir;
 
 int main(int argc, char* argv[]) {
-	boost::program_options::options_description optionDesc("Allowed Options");
+	boost::program_options::options_description optionDesc("Allowed Arguments");
 	optionDesc.add_options()
 		("help", "produce this help message")
 		("help-config", "prints all available configurations for use in .atoc files")
@@ -19,11 +19,17 @@ int main(int argc, char* argv[]) {
 	positionalOptionDesc.add("output-dir", 1);
 
 	boost::program_options::variables_map programOptions;
-	boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(optionDesc).positional(positionalOptionDesc).run(), programOptions);
+	try {
+		boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(optionDesc).positional(positionalOptionDesc).run(), programOptions);
+	} catch (std::exception e) {
+		std::cout << "Unknown argument" << std::endl;
+		return true;
+	}
 	boost::program_options::notify(programOptions);
 	
 	if(programOptions.count("help")) {
 		std::cout << ATOC_APP_NAME << " " << ATOC_VERSION_MAJOR << "." << ATOC_VERSION_MINOR << "." << ATOC_VERSION_SUBMINOR << std::endl;
+		std::cout << "atoc [<input-dir>] [<output-dir>]" << std::endl;
 		std::cout << optionDesc << std::endl;
 		return false;
 	} if(programOptions.count("help-config")) {
