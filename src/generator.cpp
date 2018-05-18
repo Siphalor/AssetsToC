@@ -2,10 +2,9 @@
 
 namespace atoc::generator {
 
-bool generateFiles(std::map<std::string,std::string> input, std::vector<std::string> output, Settings& settings, bool force) {
-	BOOST_LOG_TRIVIAL(debug) << output[0];
+bool generateFiles(std::map<std::string,OutputInformation> input, std::vector<std::string> output, Settings& settings, bool force) {
 	if(input.size() == 0 || output.size() == 0) {
-		BOOST_LOG_TRIVIAL(error) << "Internal error: At least one input or output files must be specified";
+		ATOC_LOG(generator, error) << "Internal error: At least one input or output files must be specified";
 		return false;
 	}
 	std::string outputDir = settings.getOutputDirectory() + std::string("/") + settings.get<std::string>("output-dir");
@@ -16,64 +15,132 @@ bool generateFiles(std::map<std::string,std::string> input, std::vector<std::str
 		bool shouldWrite = false;
 		for(auto it : input) {
 			inputFile = boost::filesystem::path(it.first);
-			if(boost::filesystem::is_directory(inputFile) && settings.get<bool>("force-folder-rebuild")) {
-				shouldWrite = true;
-				break;
+			if(boost::filesystem::is_directory(inputFile)) {
+				if(settings.get<bool>("force-folder-rebuild")) {
+					shouldWrite = true;
+					break;
+				} else if(settings.get<bool>("deep-folder-check")) {
+					boost::filesystem::recursive_directory_iterator directory(inputFile, boost::filesystem::symlink_option::recurse), end;
+					while(directory != end) {
+						if(boost::filesystem::last_write_time(directory->path()) > outputTime) {
+							shouldWrite = true;
+							ATOC_LOG(generator, debug) << "Found outdated deep directory \"" << directory->path().string() << "\"";
+							break;
+						}
+						directory++;
+					}
+					if(shouldWrite) break;
+				}
 			}
 			if(boost::filesystem::exists(boost::filesystem::status(inputFile)) && boost::filesystem::last_write_time(inputFile) > outputTime) {
 				shouldWrite = true;
 				break;
 			}
 		}
-		if(!shouldWrite) return true;
+		if(!shouldWrite) {
+			ATOC_LOG(generator, info) << "Everything up-to-date for target \"" << output[0] << "\"";
+			return true;
+		}
 	}
 	boost::filesystem::create_directories(boost::filesystem::path(firstOutput).parent_path());
-	std::ofstream file(firstOutput, std::ios_base::trunc | std::ios_base::out);
+	std::ofstream file(firstOutput, std::ios_base::trunc | std::ios_base::out | std::ios_base::binary);
 	std::string inputDirectory = settings.getInputDirectory() + "/" + settings.get<std::string>("input-dir") + "/";
+	unsigned successIn = 0, errorIn = 0, skippedIn = 0;
 	for(auto it : input) {
 		inputFile = boost::filesystem::path(inputDirectory + it.first);
-		if(!boost::filesystem::exists(boost::filesystem::status(inputFile))) continue;
+		if(!boost::filesystem::exists(boost::filesystem::status(inputFile))) {
+			ATOC_LOG(generator, warning) << "Could not find \"" << inputFile.string() << "\" -> Skipping";
+			skippedIn++;
+			continue;
+		}
 		if(boost::filesystem::is_directory(boost::filesystem::status(inputFile))) {
 			boost::filesystem::recursive_directory_iterator directory(inputFile, boost::filesystem::symlink_option::recurse), end;
 			while(directory != end) {
 				if(boost::filesystem::is_regular_file(directory->status())) {
-					processFile(directory->path(), generateVarName(directory->path().string().substr(inputDirectory.size()-1), settings), file, settings);
+					processFile(directory->path(), {generateVarName(directory->path().string().substr(inputDirectory.size()-1), settings)}, file, settings);
 				}
 				directory++;
 			}
+			successIn++;
 		} else {
-			processFile(inputFile, it.second, file, settings);
+			if(processFile(inputFile, it.second, file, settings)) successIn++;
+			else {
+				errorIn++;
+				ATOC_LOG(generator, error) << "Unable to process file \"" << it.first << "\"";
+			}
 		}
 	}
 	file.close();
 
+	unsigned errorOut = 0;
 	for(auto& out : output) {
 		if(out == output[0]) continue;
-		boost::filesystem::create_directories(boost::filesystem::path(outputDir+"/"+out).parent_path());
-		boost::filesystem::copy_file(firstOutput, outputDir+"/"+out, boost::filesystem::copy_option::overwrite_if_exists);
+		try {
+			boost::filesystem::create_directories(boost::filesystem::path(outputDir+"/"+out).parent_path());
+			boost::filesystem::copy_file(firstOutput, outputDir+"/"+out, boost::filesystem::copy_option::overwrite_if_exists);
+		} catch (std::exception e) {
+			ATOC_LOG(generator, warning) << "Unable to output file \"" << out << "\"";
+			errorOut++;
+		}
 	}
+	ATOC_LOG(generator, info) << "Finished \"" << output[0] << "\" with " << successIn << " out of " << successIn + errorIn + skippedIn << " input(s) and " << output.size() - errorOut << " out of " << output.size() << " outputs.";
 }
 
-bool processFile(boost::filesystem::path file, std::string variableName, std::ofstream& output, Settings& settings) {
+bool processFile(boost::filesystem::path file, OutputInformation outputInformation, std::ofstream& output, Settings& settings) {
+	unsigned long fileSize = boost::filesystem::file_size(file);
 	Settings::Setting::number_type bufferSize = settings.get<Settings::Setting::number_type>("input-buffer-size");
-	unsigned fileSize = boost::filesystem::file_size(file);
-	char content[bufferSize];
-	output << settings.get<std::string>("array-type") << "[" << std::to_string(fileSize) << "] " << variableName << " = {";
-	std::ifstream inputFile(file.string());
-	unsigned blocks = fileSize / bufferSize;
+	std::ifstream inputFile(file.string(), std::ios_base::in | std::ios_base::binary);
 	const bool useHex = settings.get<bool>("use-hex");
-	for(unsigned b = 0; b <= blocks; b++) {
-		inputFile.read(content, b < blocks ? bufferSize : fileSize % bufferSize);
-		for(unsigned i = 0; i < (b < blocks ? bufferSize : fileSize % bufferSize); i++) {
-			if(useHex)
-				output << "0x" << std::hex << (unsigned short)(unsigned char)content[i] << (i >= fileSize - 1 ? "" : ",");
-			else output << (unsigned short)(unsigned char)content[i] << (i >= fileSize - 1 ? "" : ",");
-		}
+	switch(outputInformation.compression) {
+#ifdef COMPRESS_ZIP
+		case Compression::zip: {
+			char content[fileSize];
+			unsigned long compressedOutSize = fileSize * 1.1 + 12;
+			Bytef compressedOut[compressedOutSize];
+			inputFile.read(content, fileSize);
+
+			int result = compress(compressedOut, &compressedOutSize, (Bytef*)content, fileSize);
+			switch(result) {
+				case Z_MEM_ERROR:	
+					ATOC_LOG(generator, error) << "Not enough memory";
+					return false;
+					break;
+				case Z_BUF_ERROR:
+					ATOC_LOG(generator, error) << "File too big for buffer";
+					return false;
+					break;
+				default:
+					break;
+			}
+			output << settings.get<std::string>("array-type") << "[" << std::to_string(compressedOutSize) << "] " << outputInformation.variableName << " = {";
+			for(unsigned long i = 0u; i < compressedOutSize; i++) {
+				if(useHex)
+					output << "0x" << std::hex << (unsigned short)(unsigned char)compressedOut[i] << (i >= compressedOutSize - 1 ? "" : ",");
+				else output << (unsigned short)(unsigned char)compressedOut[i] << (i >= fileSize - 1 ? "" : ",");
+			}
+			fileSize = compressedOutSize;
+			} break;
+#endif // COMPRESS_ZIP
+		case Compression::none:
+		default:
+			output << settings.get<std::string>("array-type") << "[" << std::to_string(fileSize) << "] " << outputInformation.variableName << " = {";
+			char content[bufferSize];
+			unsigned blocks = fileSize / bufferSize;
+			for(unsigned b = 0; b <= blocks; b++) {
+				inputFile.read(content, b < blocks ? bufferSize : fileSize % bufferSize);
+				for(unsigned i = 0; i < (b < blocks ? bufferSize : fileSize % bufferSize); i++) {
+					if(useHex)
+						output << "0x" << std::hex << (unsigned short)(unsigned char)content[i] << (i >= fileSize - 1 ? "" : ",");
+					else output << (unsigned short)(unsigned char)content[i] << (i >= fileSize - 1 ? "" : ",");
+				}
+			}
+			break;
 	}
 	inputFile.close();
 	output << "};\n";
 	if(settings.get<bool>("array-size"))
-		output << settings.get<std::string>("array-size-type") << " " << variableName + settings.get<std::string>("array-size-suffix") << " = " << std::to_string(fileSize) << ";\n";
+		output << settings.get<std::string>("array-size-type") << " " << outputInformation.variableName + settings.get<std::string>("array-size-suffix") << " = " << std::to_string(fileSize) << ";\n";
+	return true;
 }
 
 std::string generateVarName(std::string input, Settings& settings) {
@@ -108,6 +175,16 @@ std::string generateOutputFilename(std::string input, Settings& settings) {
 	return boost::algorithm::join(parts, settings.get<std::string>("file-delimiter")) + settings.get<std::string>("file-extension");
 }
 
+Compression getCompression(std::string id) {
+	if(id == "")
+		return Compression::none;
+#ifdef COMPRESS_ZIP
+	else if(id == "zip")
+		return Compression::zip;
+#endif // COMPRESS_ZIP
+	else return Compression::inherit;
+}
+
 const std::string Settings::Setting::toString() const {
 	switch(type) {
 		case Type::string: return *(std::string*)value; break;
@@ -126,6 +203,7 @@ const std::map<std::string, Settings::Setting> Settings::settings = {
 	{"input-dir", {"Sets the input root directory",Settings::Setting::Type::string,new std::string("")}},
 	{"output-dir", {"Sets the output root directory",Settings::Setting::Type::string,new std::string("")}},
 	{"force-folder-rebuild", {"Forces the generator to rebuild folder entries every time",Settings::Setting::Type::boolean,new bool(true)}},
+	{"deep-folder-check", {"Makes the generator checks all contained files when encountering folder entries (may be very inefficient)",Settings::Setting::Type::boolean,new bool(false)}},
 	{"input-buffer-size", {"Sets the size of the asset input buffer",Settings::Setting::Type::number,new Settings::Setting::number_type(1024u),Settings::Setting::nonzero}},
 	{"array-name-delimiter", {"Sets the delimiter for the automatic output variable naming",Settings::Setting::Type::string,new std::string("")}},
 	{"array-name-camelcase", {"Sets the camel case flag for the automatic output variable naming",Settings::Setting::Type::boolean,new bool(true)}},
@@ -163,7 +241,7 @@ bool Settings::set(std::string key, std::string value) {
 	if(native) {
 		type = settings.at(key).type;
 		if(settings.at(key).flags & Setting::notnull && value == "") {
-			BOOST_LOG_TRIVIAL(error) << "Cannot set config \"" << key << "\" to null";
+			ATOC_LOG(generator, error) << "Cannot set config \"" << key << "\" to null";
 			return false;
 		}
 	}
@@ -176,21 +254,21 @@ bool Settings::set(std::string key, std::string value) {
 			try {
 				long val = std::stol(value);
 				if(native && !val) {
-					BOOST_LOG_TRIVIAL(error) << "Config \"" << key << "\" must be at least 1";
+					ATOC_LOG(generator, error) << "Config \"" << key << "\" must be at least 1";
 					return false;
 				}
 				if(val > 8388608) {
-					BOOST_LOG_TRIVIAL(warning) << "Config for \"" << key << "\" is too high, it must be at most 838860";
+					ATOC_LOG(generator, warning) << "Config for \"" << key << "\" is too high, it must be at most 838860";
 					return false;
 				} else if(val < 0) {
-					BOOST_LOG_TRIVIAL(warning) << "Config for \"" << key << "\" is too small, it must be at least 0";
+					ATOC_LOG(generator, warning) << "Config for \"" << key << "\" is too small, it must be at least 0";
 					return false;
 				}
 				delete (Settings::Setting::number_type*)values[key];
 				values[key] = (void*) new Settings::Setting::number_type(val);
-				BOOST_LOG_TRIVIAL(debug) << val;
+				ATOC_LOG(generator, debug) << val;
 			} catch (std::exception e) {
-				BOOST_LOG_TRIVIAL(error) << "Unable to convert \"" << value << "\" to config number for \"" << key << "\"";
+				ATOC_LOG(generator, error) << "Unable to convert \"" << value << "\" to config number for \"" << key << "\"";
 				if(native) return false;
 				values[key] = (void*) new Settings::Setting::number_type(0u);
 				return false;
@@ -238,7 +316,7 @@ void Settings::deleteEntry(std::string key) {
 			delete (bool*)values[key];
 			break;
 		default:
-			BOOST_LOG_TRIVIAL(error) << "Could not delete config entry: No such config key!";
+			ATOC_LOG(generator, error) << "Could not delete config entry: No such config key!";
 			return;
 			break;
 	}

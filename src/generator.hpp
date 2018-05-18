@@ -9,18 +9,36 @@
 #include <boost/optional.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+#ifdef COMPRESS_ZIP
+#include "zlib.h"
+#endif // COMPRESS_ZIP
 #include "util.hpp"
 #include "log.hpp"
 
 namespace atoc::generator {
 
+enum class Compression;
+struct OutputInformation;
 class Settings;
 
-bool generateFiles(std::map<std::string,std::string> input, std::vector<std::string> output, Settings& settings, bool force = false);
-bool processFile(boost::filesystem::path file, std::string variableName, std::ofstream& output, Settings& settings);
+bool generateFiles(std::map<std::string,OutputInformation> input, std::vector<std::string> output, Settings& settings, bool force = false);
+static bool processFile(boost::filesystem::path file, OutputInformation outputInformation, std::ofstream& output, Settings& settings);
 
 std::string generateVarName(std::string input, Settings& settings);
 std::string generateOutputFilename(std::string input, Settings& settings);
+
+enum class Compression {
+	inherit, none,
+#ifdef COMPRESS_ZIP
+	zip,
+#endif // COMPRESS_ZIP
+};
+Compression getCompression(std::string id);
+
+struct OutputInformation {
+	std::string variableName = "";
+	Compression compression = Compression::inherit;
+};
 
 class Settings {
 	public:

@@ -19,11 +19,13 @@ bool isGenForced(boost::filesystem::path cache, boost::filesystem::path atoc) {
 };
 
 bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path outputDir) {
+	atoc::log::init(atoc::log::Severity::debug, "atoc.log");
+	ATOC_LOG(parser, info) << "Test";
 	if(!boost::filesystem::exists(boost::filesystem::status(inputFile))) {
-		BOOST_LOG_TRIVIAL(fatal) << "The .atoc file '" << inputFile.wstring() << "' doesn't exist." << std::endl;
+		ATOC_LOG(parser, fatal) << "The .atoc file '" << inputFile.wstring() << "' doesn't exist." << std::endl;
 		return false;
 	}
-	BOOST_LOG_TRIVIAL(info) << ATOC_APP_NAME << " version " << ATOC_VERSION_MAJOR << "." << ATOC_VERSION_MINOR << "." << ATOC_VERSION_SUBMINOR;
+	ATOC_LOG(parser, info) << ATOC_APP_NAME << " version " << ATOC_VERSION_MAJOR << "." << ATOC_VERSION_MINOR << "." << ATOC_VERSION_SUBMINOR;
 	std::fstream file;
 	bool forceGen = isGenForced(boost::filesystem::path(inputFile.parent_path().string()+"/.atoccache"), inputFile);
 	bool endOfFile = false;
@@ -34,26 +36,30 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 	char symbol = '\0';
 	bool bundled = false;
 	bool await = true;
-	std::map<std::string,std::string> input;
+	std::map<std::string,atoc::generator::OutputInformation> input;
 	std::vector<std::string> output;
 	auto currentInputIterator = input.end();
 	bool outputGiven = false;
 	std::string currentString = "";
 	std::string whiteBuffer = "";
 	std::string configKey = "";
-	unsigned currentLine = 1;
-	file.open(inputFile.string(), std::ios_base::in);
+	FilePosition filePosition;
+	file.open(inputFile.string(), std::ios_base::in | std::ios_base::binary);
 	while(!endOfFile) {
 		if(!isCharOneOf(symbol, ATOC_WHITESPACE))
 			whiteBuffer = "";
 		if(isCharOneOf(symbol, ATOC_NEWLINE)) {
-			currentLine++;
+			filePosition.line++;
+			filePosition.column = 0;
+			if(parseMode == ParseMode::comment) parseMode = ParseMode::await;
 		}
 		symbol = file.get();
+		filePosition.column++;
 		if(symbol == std::char_traits<char>::eof()) {
 			endOfFile = true;
 			symbol = '\n';
 		}
+		if(parseMode == ParseMode::comment) continue;
 		if(await) {
 			if(parseMode == ParseMode::await) {
 				if(isCharOneOf(symbol, ATOC_WHITESPACE))
@@ -63,11 +69,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 					phase = Phase::specialize;
 					continue;
 				} else if(symbol == '#') {
-					while(!endOfFile) {
-						symbol = file.get();
-						if(symbol == std::char_traits<char>::eof()) return true;
-						if(isCharOneOf(symbol, ATOC_NEWLINE)) break;
-					}
+					parseMode = ParseMode::comment;
 				} else if(symbol == ';')
 					continue;
 				else if(symbol == '>') {
@@ -77,7 +79,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 					parseMode = ParseMode::inputDirectory;
 					continue;
 				} else {
-					BOOST_LOG_TRIVIAL(debug) << "input?";
+					ATOC_LOG(parser, debug) << "Awaiting statement...";
 					parseMode = ParseMode::genInput;
 					phase = Phase::file;
 					if(symbol == '{') {
@@ -96,13 +98,10 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 				} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
 					continue;
 				} else if(symbol == ';') {
-					error::statementEnd(currentLine, "automatic output filename generation is not available for bundles");
-					return false;
-				} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-					error::unexpectedSymbol(currentLine, symbol, "expected '>' or statement end", "operator");
+					error::statementEnd(filePosition, "automatic output filename generation is not available for bundles");
 					return false;
 				} else {
-					error::unexpectedSymbol(currentLine, symbol, "expected '>' or statement end");
+					error::unexpectedSymbol(filePosition, symbol, "expected '>' or statement end");
 					return false;
 				}
 			} else if(parseMode == ParseMode::genOutput) {
@@ -114,7 +113,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 				} else if(bundled && symbol == '}') {
 					await = false;
 				} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-					error::unexpectedSymbol(currentLine, symbol, "expected output filename", "operator");
+					error::unexpectedSymbol(filePosition, symbol, "expected output filename", "operator");
 					return false;
 				} else {
 					await = false;
@@ -146,6 +145,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 			} else {
 				if(isCharOneOf(symbol, ATOC_WHITESPACE))
 					continue;
+				await = false;
 			}
 		}
 		switch(parseMode) {
@@ -155,35 +155,40 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 					if(symbol == '$') {
 						parseMode = ParseMode::inlineConfig;
 						phase = Phase::key;
+						await = true;
+						continue;
 					} else if(symbol == '<') {
 						parseMode = ParseMode::include;
+					} else if(symbol == '>') {
+						parseMode = ParseMode::cmd;
+						await = true;
+						continue;
 					} else if(isCharOneOf(symbol, ATOC_NEWLINE)) {
-						error::statementEnd(currentLine, "expected config statement");
+						error::statementEnd(filePosition, "expected config statement");
 						return false;
 					} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-						error::unexpectedSymbol(currentLine, symbol, "expected config statement", "operator");
+						error::unexpectedSymbol(filePosition, symbol, "expected config statement", "operator");
 						return false;
 					} else {
-						file.unget();
 						phase = Phase::key;
 						await = true;
 					}
-				} else if(phase == Phase::key) {
+				} 
+				if(phase == Phase::key) {
 					if(symbol == ':') {
 						if(currentString == "") {
-							error::unexpectedSymbol(currentLine, symbol, "expected config key");
+							error::unexpectedSymbol(filePosition, symbol, "expected config key");
 							return false;
 						}
-						// TODO: Config key
 						configKey = currentString;
 						currentString = "";
 						phase = Phase::value;
 						await = true;
 					} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-						error::unexpectedSymbol(currentLine, symbol, "expected config key", "operator");
+						error::unexpectedSymbol(filePosition, symbol, "expected config key", "operator");
 						return false;
 					} else if(isCharOneOf(symbol, ATOC_INLINE_STATEMENT_END)) {
-						error::statementEnd(currentLine, "expected config key");
+						error::statementEnd(filePosition, "expected config key");
 						return false;
 					} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
 						whiteBuffer += symbol;
@@ -193,7 +198,6 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 					}
 				} else {
 					if(isCharOneOf(symbol, ATOC_INLINE_STATEMENT_END)) {
-						// TODO: Config value
 						settings.set(configKey, currentString);
 						currentString = "";
 						if(symbol == ';') {
@@ -209,6 +213,19 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 						currentString += whiteBuffer + symbol;
 						whiteBuffer = "";
 					}
+				}
+				break;
+			case ParseMode::cmd:
+				if(isCharOneOf(symbol, ATOC_NEWLINE)) {
+					ATOC_LOG(parser, debug) << currentString << std::endl;
+					std::system(currentString.c_str());
+					currentString = ""; whiteBuffer = "";
+					parseMode = ParseMode::await;
+					await = true;
+				} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
+					whiteBuffer += symbol;
+				} else {
+					currentString += whiteBuffer + symbol;
 				}
 				break;
 			case ParseMode::inputDirectory:
@@ -231,61 +248,75 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 				if(phase == Phase::file) {
 					if(symbol == '|') {
 						if(currentString == "") {
-							error::unexpectedSymbol(currentLine, symbol, "expected input filename");
+							error::unexpectedSymbol(filePosition, symbol, "expected input filename");
 							return false;
 						} else {
 							phase = Phase::var;
-							currentInputIterator = input.insert({currentString,""}).first;
+							currentInputIterator = input.insert({currentString,{}}).first;
 							currentString = "";
 							await = true;
 						}
-					} else if(isCharOneOf(symbol, bundled ? ";}" : ATOC_INLINE_STATEMENT_END)) {
-						if(currentString == "") {
-							error::unexpectedSymbol(currentLine, symbol, "expected input filename");
-							return false;
-						} else {
-							currentInputIterator=input.insert({currentString, atoc::generator::generateVarName(currentString, settings)}).first;
-							//BOOST_LOG_TRIVIAL(debug) << in.first->first;
-							currentString = "";
-							await = true;
-							if(!bundled) {
-								output.push_back(atoc::generator::generateOutputFilename(currentInputIterator->first, settings));
-								ATOC_PARSER_GENERATE_FILES;
-								parseMode = ParseMode::await;
-								output.clear();
-								input.clear();
+					} else if(isCharOneOf(symbol, bundled ? ATOC_INLINE_STATEMENT_END "}*" : ATOC_INLINE_STATEMENT_END "*")) {
+						if(bundled) {
+							if(currentString != "") {
+								currentInputIterator=input.insert({currentString,{atoc::generator::generateVarName(currentString,settings)}}).first;
 							}
+							await = true;
 							if(symbol == '}') {
+								if(input.size() == 0) {
+									error::statementEnd(filePosition, "expected input filenames");
+									return false;
+								}
 								parseMode = ParseMode::genMiddle;
+							} else if(symbol == '*') {
+								if(currentString == "") {
+									error::unexpectedSymbol(filePosition, symbol, "expected input filename", "compression operator");
+									return false;
+								}
+								phase = Phase::compression;
 							}
+						} else {
+							if(currentString == "") {
+								error::statementEnd(filePosition, "expected input filename");
+								return false;
+							}
+							await = true;
+							if(symbol = '*') {
+								currentInputIterator=input.insert({currentString,atoc::generator::OutputInformation{atoc::generator::generateVarName(currentString,settings)}}).first;
+								phase = Phase::compression;
+								continue;
+							}
+							parseMode = ParseMode::await;
+							atoc::generator::generateFiles({{currentString,atoc::generator::OutputInformation{atoc::generator::generateVarName(currentString,settings)}}},{atoc::generator::generateOutputFilename(currentString,settings)},settings,forceGen);
 						}
+						currentString = ""; whiteBuffer = "";
 					} else if(symbol == '>') {
 						if(currentString == "" || bundled) {
-							error::unexpectedSymbol(currentLine, symbol, "expected input filename", "output operator \">\"");
+							error::unexpectedSymbol(filePosition, symbol, "expected input filename", "output operator");
 							return false;
 						} else {
-							input.insert({currentString, atoc::generator::generateVarName(currentString, settings)});
+							input.insert({currentString, {atoc::generator::generateVarName(currentString, settings)}});
 							currentString = "";
 							parseMode = ParseMode::genOutput;
 							
 							await = true;
 						}
 					} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-						error::unexpectedSymbol(currentLine, symbol, "expected input filename");
+						error::unexpectedSymbol(filePosition, symbol, "expected input filename");
 						return false;
 					} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
 						whiteBuffer += symbol;
 					} else {
 						currentString += whiteBuffer + symbol;
 					}
-				} else {
+				} else if(phase == Phase::var){
 					if(isCharOneOf(symbol, bundled ? ";}" : ATOC_INLINE_STATEMENT_END)) {
 						if(currentString == "") {
 							if(isCharOneOf(symbol, ATOC_NEWLINE)) continue;
-							error::statementEnd(currentLine, "expected variable name");
+							error::statementEnd(filePosition, "expected variable name");
 							return false;
 						} else {
-							currentInputIterator->second = currentString;
+							currentInputIterator->second = {currentString};
 							currentString = "";
 							if(bundled) {
 								if(symbol == ';') {
@@ -304,16 +335,38 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 						}
 					} else if(symbol == '>' && !bundled) {
 						if(currentString == "") {
-							error::statementEnd(currentLine, "expected variable name");
+							error::statementEnd(filePosition, "expected variable name");
 							return false;
 						} else {
-							currentInputIterator->second = currentString;
+							currentInputIterator->second = {currentString};
 							currentString = "";
 							parseMode = ParseMode::genOutput;
 							await = true;
 						}
 					} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-						error::unexpectedSymbol(currentLine, symbol); return false;
+						error::unexpectedSymbol(filePosition, symbol); return false;
+					} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
+						whiteBuffer += symbol;
+					} else {
+						currentString += whiteBuffer + symbol;
+					}
+				} else if(phase == Phase::compression) {
+					if(isCharOneOf(symbol, bundled ? ATOC_INLINE_STATEMENT_END "}" : ATOC_INLINE_STATEMENT_END ">")) {
+						currentInputIterator->second.compression = atoc::generator::getCompression(currentString);
+						await = true;
+						currentString = ""; whiteBuffer = "";
+						if(symbol == '}') {
+							parseMode = ParseMode::genMiddle;
+						} else if(bundled) {
+							phase = Phase::file;
+						} else if(symbol == '>') {
+							parseMode = ParseMode::genOutput;
+						} else {
+							atoc::generator::generateFiles(input,{atoc::generator::generateOutputFilename(currentInputIterator->first,settings)},settings,forceGen);
+							parseMode = ParseMode::await;
+						}
+					} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
+						error::unexpectedSymbol(filePosition, symbol, "expected compression identifier", "operator");
 					} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
 						whiteBuffer += symbol;
 					} else {
@@ -333,7 +386,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 							parseMode = ParseMode::await;
 							continue;
 						}
-						error::statementEnd(currentLine, "expected output filename");
+						error::statementEnd(filePosition, "expected output filename");
 						return false;
 					} else {
 						output.push_back(currentString);
@@ -355,7 +408,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 						parseMode = ParseMode::await;
 					}
 				} else if(isCharOneOf(symbol, ATOC_OPERATOR)) {
-					error::unexpectedSymbol(currentLine, symbol); return false;
+					error::unexpectedSymbol(filePosition, symbol); return false;
 				} else if(isCharOneOf(symbol, ATOC_WHITESPACE)) {
 					whiteBuffer += symbol;
 				} else {
@@ -366,7 +419,7 @@ bool parseFile(boost::filesystem::path inputFile, boost::filesystem::path output
 				break;
 		}
 	}
-	BOOST_LOG_TRIVIAL(debug) << "Print .atoccache";
+	ATOC_LOG(parser, debug) << "Print .atoccache";
 	file.close();
 	file.open(inputFile.parent_path().string()+"/.atoccache", std::ios_base::out | std::ios_base::trunc);
 	file << ATOC_VERSION_MAJOR << "." << ATOC_VERSION_MINOR << "." << ATOC_VERSION_SUBMINOR;
@@ -379,11 +432,11 @@ bool isCharOneOf(char& needle, const char* haystack) {
 	return false;
 }
 
-void atoc::parser::error::unexpectedSymbol(unsigned line, char symbol, std::string expectation, std::string symbolName) {
-	BOOST_LOG_TRIVIAL(error) << "Unexpected " << symbolName << " '" << symbol << "' in line " << line << (expectation == "" ? "" : ", ") << expectation;
+void atoc::parser::error::unexpectedSymbol(FilePosition pos, char symbol, std::string expectation, std::string symbolName) {
+	ATOC_LOG(parser, error) << "Unexpected " << symbolName << " '" << symbol << "' at " << pos.line << ":" << pos.column << (expectation == "" ? "" : ", ") << expectation;
 }
 
-void atoc::parser::error::statementEnd(unsigned line, std::string expectation) {
-	BOOST_LOG_TRIVIAL(error) << "Unexpected statement end in line " << line << (expectation == "" ? "" : ", ") << expectation;
+void atoc::parser::error::statementEnd(FilePosition pos, std::string expectation) {
+	ATOC_LOG(parser, error) << "Unexpected statement end at " << pos.line << ":" << pos.column << (expectation == "" ? "" : ", ") << expectation;
 }
 }
